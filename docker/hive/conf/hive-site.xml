@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<configuration>
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:postgresql://metastore-db:5432/metastore</value>
+        <description>JDBC connection URL for the metastore</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>org.postgresql.Driver</value>
+        <description>Driver class name for the metastore database</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>hive</value>
+        <description>Username for metastore database</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>hivepassword</value>
+        <description>Password for metastore database</description>
+    </property>
+    <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>/user/hive/warehouse</value>
+        <description>Location of Hive tables in HDFS</description>
+    </property>
+    <property>
+        <name>hive.server2.enable.doAs</name>
+        <value>false</value>
+    </property>
+    <property>
+    <name>hive.metastore.local</name>
+    <value>false</value>
+    <description>Use a remote metastore server</description>
+    </property>
+    <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://hive-metastore:9083</value>
+        <description>Thrift URI for the remote metastore</description>
+    </property>
+    <property>
+        <name>hive.execution.engine</name>
+        <value>mr</value>
+        <description>Use MapReduce execution engine</description>
+    </property>
+    <property>
+        <name>hive.hadoop.supports.splittable.combineinputformat</name>
+        <value>true</value>
+    </property>
+    <property>
+        <name>hive.execution.mode</name>
+        <value>local</value>
+    </property>
+
+
+</configuration>
