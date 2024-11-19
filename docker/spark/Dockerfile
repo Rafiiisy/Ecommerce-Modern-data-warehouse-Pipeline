@@ -1,25 +1,33 @@
-FROM bitnami/spark:3.4.1
+FROM bitnami/spark:3.4.0
 
-# Set working directory
-WORKDIR /app
+# Switch to root to install dependencies
+USER root
 
-# Copy configuration files
-COPY conf/core-site.xml /opt/bitnami/spark/conf/core-site.xml
-COPY conf/hdfs-site.xml /opt/bitnami/spark/conf/hdfs-site.xml
+# Install required build tools and Python dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    gawk \
+    bison \
+    build-essential \
+    manpages-dev \
+    python3-pip && \
+    apt-get clean
 
-FROM bitnami/spark:3.4.1
+# Install GLIBC 2.32
+RUN wget http://ftp.gnu.org/gnu/libc/glibc-2.32.tar.gz && \
+    tar -xvzf glibc-2.32.tar.gz && \
+    cd glibc-2.32 && \
+    mkdir build && cd build && \
+    ../configure --prefix=/opt/glibc-2.32 && \
+    make -j$(nproc) && \
+    make install && \
+    cd ../.. && rm -rf glibc-2.32 glibc-2.32.tar.gz
 
-# Set the working directory
-WORKDIR /app
-
-# Copy application code into the container
-COPY scripts/ingest_data.py /app/
-COPY scripts/requirements.txt /app/
-COPY scripts/config.py /app/
+# Update the library path to include the new GLIBC
+ENV LD_LIBRARY_PATH=/opt/glibc-2.32/lib:$LD_LIBRARY_PATH
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip3 install pyspark py4j numpy pandas
 
-
-# Command to run the ingestion script
-CMD ["python", "/app/ingest_data.py"]
+# Switch back to non-root user
+USER 1001

@@ -1,0 +1,42 @@
+# Spark Configuration
+spark:
+  app:
+    name: ExchangeRateProcessor
+    master: spark://spark:7077
+  
+  executor:
+    memory: 2g
+    cores: 2
+    instances: 2
+
+# API Configuration
+api:
+  exchange_rate:
+    base_url: https://v6.exchangerate-api.com/v6
+    api_key: d859a94bdc40c124d4842d22
+    endpoint: latest
+    base_currency: USD
+    update_interval: 3600  # in seconds
+
+# HDFS Configuration
+hdfs:
+  namenode: hadoop:9000
+  paths:
+    raw: /data/raw/exchange_rates
+    processed: /data/processed/exchange_rates
+
+# Processing Configuration
+processing:
+  format: parquet
+  mode: append
+  partition:
+    column: date
+  compression: snappy
+
+# Logging Configuration
+logging:
+  level: INFO
+  file: /app/logs/app.log
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
+  rotation: "1 day"
+  retention: "7 days"

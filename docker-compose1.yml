@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    ports:
+      - "9870:9870"  # HDFS Namenode UI
+      - "9820:9820"  # HDFS Namenode RPC
+    environment:
+      - CLUSTER_NAME=hadoop-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9820
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    networks:
+      - hadoop_network
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    depends_on:
+      - namenode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9820
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    networks:
+      - hadoop_network
+
+
+  nifi:
+    image: apache/nifi:1.15.3
+    container_name: nifi
+    ports:
+      - "8082:8082"
+    environment:
+      - NIFI_WEB_HTTP_PORT=8082
+    volumes:
+      - "/Users/rafisyafrinaldi/Documents/UGM/S2/Sem 1 (s2)/DWIB/project dwib/nifi:/nifi_data"
+      - ./docker/nifi/conf/core-site.xml:/opt/nifi/nifi-current/conf/core-site.xml
+      - ./docker/nifi/conf/hdfs-site.xml:/opt/nifi/nifi-current/conf/hdfs-site.xml
+    networks:
+      - hadoop_network
+    user: root
+
+  spark-ingest:
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+    container_name: spark-ingest
+    volumes:
+      - ./docker/spark/conf/core-site.xml:/opt/spark/conf/core-site.xml
+      - ./docker/spark/conf/hdfs-site.xml:/opt/spark/conf/hdfs-site.xml
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    networks:
+      - hadoop_network
+
+  workflow-controller:
+    container_name: workflow-controller
+    build:
+      context: ./docker/workflow_controller
+    volumes:
+      - ./docker/spark/conf/core-site.xml:/opt/bitnami/spark/conf/core-site.xml
+      - ./docker/spark/conf/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml
+    environment:
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 
+      - HADOOP_CONF_DIR=/app
+    networks:
+      - hadoop_network
+    depends_on:
+      - namenode
+
+  # spark-train:
+  #   build:
+  #     context: ./docker/spark_train
+  #   container_name: spark-train
+  #   volumes:
+  #     - ./docker/spark/conf/core-site.xml:/opt/bitnami/spark/conf/core-site.xml
+  #     - ./docker/spark/conf/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml
+  #     - ./models:/models
+  #   networks:
+  #     - hadoop_network
+  #   depends_on:
+  #     - namenode
+
+  metastore-db:
+    image: postgres:13
+    container_name: metastore-db
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hivepassword
+    ports:
+      - "15432:5432"  
+    volumes:
+      - metastore_db_data:/var/lib/postgresql/data
+    networks:
+      - hadoop_network
+
+  hive-metastore:
+    build:
+      context: ./docker/hive
+    container_name: hive-metastore
+    environment:
+      HADOOP_HOME: /opt/hadoop
+      HIVE_HOME: /opt/hive
+      METASTORE_DB_TYPE: postgres
+      METASTORE_DB_URI: jdbc:postgresql://metastore-db:5432/metastore
+      METASTORE_DB_USER: hive
+      METASTORE_DB_PASS: hivepassword
+    depends_on:
+      - namenode
+      - metastore-db
+    ports:
+      - "9083:9083"
+    volumes:
+      - ./docker/hive/conf/hdfs-site.xml:/opt/hive/conf/hdfs-site.xml
+      - ./docker/hive/conf/core-site.xml:/opt/hive/conf/core-site.xml
+    networks:
+      - hadoop_network
+
+  superset:
+    build:
+      context: ./docker/superset
+    container_name: superset
+    ports:
+      - "8089:8088"
+    depends_on:
+      - hive-metastore
+    environment:
+      SUPERSET_WEBSERVER_PORT: 8088
+      SECRET_KEY: my_secret_key
+    volumes:
+      - ./docker/superset/conf/superset_config.py:/app/pythonpath/superset_config.py
+    networks:
+      - hadoop_network
+
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+  metastore_db_data:
+  
+
+networks:
+  hadoop_network:
+    driver: bridge
+
+
+  

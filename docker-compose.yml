@@ -27,13 +27,128 @@ services:
     networks:
       - hadoop_network
 
+  spark-master:
+    image: hafizhh/spark-currency:latest
+    container_name: spark-master
+    restart: always
+    ports:
+      - "8080:8080"  # Spark Web UI
+      - "7077:7077"  # Spark Master RPC
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - HADOOP_USER_NAME=root
+    volumes:
+      - spark_logs:/opt/bitnami/spark/logs
+    networks:
+      - hadoop_network
+
+  spark-worker:
+    image: hafizhh/spark-currency:latest
+    container_name: spark-worker
+    restart: always
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"  # Spark Worker Web UI
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - HADOOP_USER_NAME=root
+      - SPARK_WORKER_MEMORY=8G        # Adjusted for larger shared resources
+      - SPARK_WORKER_CORES=4         # Allocated more CPU cores
+    volumes:
+      - ./docker/spark/src:/opt/spark/src
+      - spark_logs:/opt/bitnami/spark/logs
+    networks:
+      - hadoop_network
+
+  spark-app-processor:
+    image: hafizhh/spark-currency:latest
+    container_name: spark-app-processor
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+    restart: on-failure
+    depends_on:
+      - spark-master
+      - namenode
+    environment:      
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./docker/spark/src:/opt/spark/src
+      - spark_logs:/opt/bitnami/spark/logs
+      - ./docker/spark/conf/core-site.xml:/opt/spark/conf/core-site.xml
+      - ./docker/spark/conf/hdfs-site.xml:/opt/spark/conf/hdfs-site.xml
+    command: >
+      /bin/bash -c "
+      mkdir -p /opt/bitnami/spark/logs &&
+      pip install requests &&
+      /opt/bitnami/spark/bin/spark-submit 
+      --master spark://spark-master:7077
+      --deploy-mode client
+      --name ExchangeRateETL
+      --conf spark.hadoop.fs.defaultFS=hdfs://namenode:9820
+      --conf spark.cores.max=1
+      --driver-memory 1G
+      --executor-memory 2G
+      --executor-cores 1
+      --driver-cores 1
+      /opt/spark/src/exchange_rate_processor.py
+      --output hdfs://namenode:9820/user/spark/exchange_rate 2>&1 | tee /opt/bitnami/spark/logs/exchange_rate_processor.log"
+    networks:
+      - hadoop_network
+
+  spark-app-forecast:
+    image: hafizhh/spark-currency:latest
+    container_name: spark-app-forecast
+    build:
+      context: ./docker/spark
+      dockerfile: Dockerfile
+    restart: on-failure
+    depends_on:
+      - spark-master
+      - namenode
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./docker/spark/src:/opt/spark/src
+      - spark_logs:/opt/bitnami/spark/logs
+      - ./docker/spark/conf/core-site.xml:/opt/spark/conf/core-site.xml
+      - ./docker/spark/conf/hdfs-site.xml:/opt/spark/conf/hdfs-site.xml
+    command: >
+      /bin/bash -c "
+      mkdir -p /opt/bitnami/spark/logs &&
+      pip install requests &&
+      /opt/bitnami/spark/bin/spark-submit 
+      --master spark://spark-master:7077
+      --deploy-mode client
+      --name ExchangeRateForecast
+      --conf spark.hadoop.fs.defaultFS=hdfs://namenode:9820
+      --conf spark.cores.max=1
+      --driver-memory 1G
+      --executor-memory 2G
+      --executor-cores 1
+      --driver-cores 1
+      /opt/spark/src/exchange_rate_forecasting.py
+      --output hdfs://namenode:9820/user/spark/forecast_output 2>&1 | tee /opt/bitnami/spark/logs/exchange_rate_forecasting.log"
+    networks:
+      - hadoop_network
+
   nifi:
     image: apache/nifi:1.15.3
     container_name: nifi
     ports:
-      - "8080:8080"
+      - "8082:8082"  # NiFi Web UI
     environment:
-      - NIFI_WEB_HTTP_PORT=8080
+      - NIFI_WEB_HTTP_PORT=8082
     volumes:
       - "/Users/rafisyafrinaldi/Documents/UGM/S2/Sem 1 (s2)/DWIB/project dwib/nifi:/nifi_data"
       - ./docker/nifi/conf/core-site.xml:/opt/nifi/nifi-current/conf/core-site.xml
@@ -41,32 +156,6 @@ services:
     networks:
       - hadoop_network
     user: root
-
-  spark-ingest:
-    build:
-      context: ./docker/spark
-      dockerfile: Dockerfile
-    container_name: spark-ingest
-    volumes:
-      - ./docker/spark/conf/core-site.xml:/opt/spark/conf/core-site.xml
-      - ./docker/spark/conf/hdfs-site.xml:/opt/spark/conf/hdfs-site.xml
-    environment:
-      - SPARK_MASTER_URL=spark://spark-master:7077
-    networks:
-      - hadoop_network
-
-  spark-train:
-    build:
-      context: ./docker/spark_train
-    container_name: spark-train
-    volumes:
-      - ./docker/spark/conf/core-site.xml:/opt/bitnami/spark/conf/core-site.xml
-      - ./docker/spark/conf/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml
-      - ./models:/models
-    networks:
-      - hadoop_network
-    depends_on:
-      - namenode
 
   metastore-db:
     image: postgres:13
@@ -76,7 +165,7 @@ services:
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hivepassword
     ports:
-      - "15432:5432"  
+      - "15432:5432"  # Metastore Database
     volumes:
       - metastore_db_data:/var/lib/postgresql/data
     networks:
@@ -97,7 +186,7 @@ services:
       - namenode
       - metastore-db
     ports:
-      - "9083:9083"
+      - "9083:9083"  # Hive Metastore Thrift Port
     volumes:
       - ./docker/hive/conf/hdfs-site.xml:/opt/hive/conf/hdfs-site.xml
       - ./docker/hive/conf/core-site.xml:/opt/hive/conf/core-site.xml
@@ -109,7 +198,7 @@ services:
       context: ./docker/superset
     container_name: superset
     ports:
-      - "8089:8088"
+      - "8089:8088"  # Superset Web UI
     depends_on:
       - hive-metastore
     environment:
@@ -120,16 +209,12 @@ services:
     networks:
       - hadoop_network
 
-
 volumes:
   hadoop_namenode:
   hadoop_datanode:
   metastore_db_data:
-  
+  spark_logs:
 
 networks:
   hadoop_network:
     driver: bridge
-
-
-  

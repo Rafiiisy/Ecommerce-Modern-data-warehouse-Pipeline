@@ -1,0 +1,9 @@
+pyhive[hive]==0.6.4
+pyspark==3.5.0
+numpy
+pandas
+scikit-learn
+pyarrow==14.0.1
+thrift==0.16.0
+joblib
+findspark
